@@ -8,6 +8,11 @@ def send_reboot(e5_uart):
     cmd = bytes('AT+MSGHEX="02"\n', 'utf-8')
     e5_uart.write(cmd)
 
+def send_data(msg_data, e5_uart):
+    """Send data in message."""
+    cmd = bytes(f'AT+MSGHEX="{msg_data}"\n', 'utf-8')
+    e5_uart.write(cmd)
+
 def check_for_downlink(lin, e5_uart):
     """'lin' is a line received from the E5 module.  Check to see if it is
     a Downlink message, and if so, process the request."""
@@ -22,11 +27,6 @@ def check_for_downlink(lin, e5_uart):
             if dr in (0, 1, 2, 3):
                 cmd = bytes('AT+DR=%s\n' % dr, 'utf-8')
                 e5_uart.write(cmd)
-
-        elif data[:2] == '02':
-            # Request to change Detail mode: 1 is Detail mode, 0 is Average mode
-            mode = int(data[2:4], 16)
-            config.detail = mode
 
         elif data[:2] == '03':
             # Request to change time between transmissions, 2 byte (4 Hex characters)

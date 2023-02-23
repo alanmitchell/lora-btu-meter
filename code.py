@@ -124,7 +124,13 @@ while True:
         ticks_since_xmit = (cur_ticks - last_xmit) & _TICKS_MAX
         if ticks_since_xmit >= config.secs_between_xmit * 1000:
             last_xmit = cur_ticks
-            lora.send_reboot(e5_uart)
+            t_hot, t_cold, _ = current_temps()
+            t_hot_tenths = int(t_hot * 10.0 + 0.5)
+            t_cold_tenths = int(t_cold * 10.0 + 0.5)
+            # Note: below does not deal with negative temperatures F, which should not occur
+            msg = f'05{heat_count:06X}{flow_count:06X}{t_hot_tenths:04X}{t_cold_tenths:04X}'
+            print(msg)
+            lora.send_data(msg, e5_uart)
 
     except KeyboardInterrupt:
         sys.exit()
