@@ -1,24 +1,26 @@
-"""CircuitPython code to measure electrical power and transmit data via LoRaWAN.
-The radio module used is a SEEED Studio Grove E5. Voltage is sampled from an 
-Jameco 5VAC power adapter and current sampled from a CR Magnetics CR 3110-3000 CT.
-Both current and voltage waveforms are connected to a 2.048 Volt reference voltage 
-so that the AC voltage swing stays within limits of the microcontroller ADC.
+"""CircuitPython code to implement a BTU meter and send the data via LoRaWAN.
+Cumulative BTUs and gallons of flow are measured and transmitted.  Also, hot and
+cold temperatures of the fluid are transmitted, as measured at the time of 
+transmission (*not* an average over the last gallon).
 """
 import time
 import board
 import busio
+from analogio import AnalogIn
+from digitalio import DigitalInOut, Direction, Pull
+import supervisor
 import sys
 
-from detail_power_reader import DetailReader
-from average_power_reader import AverageReader
 import lora
 from config import config
+from thermistor import t_from_adc
+import calibrate
 
 # Serial port talking to LoRaWAN module, SEEED Grove E5.
 e5_uart = busio.UART(
     board.TX, board.RX, 
     baudrate=9600, 
-    timeout=0.01,                 # need some timeout for readline() to work.
+    timeout=0.0,                 # need some timeout for readline() to work.
     receiver_buffer_size=128,     # when downlink is received, about 90 bytes are received.
 )
 
@@ -27,45 +29,107 @@ time.sleep(8.0)
 lora.send_reboot(e5_uart)
 time.sleep(7.0)    # need to wait for send to continue.
 
-# Send command to get ID info sent back from the E5
-cmd = bytes('AT+ID\n', 'utf-8')
-e5_uart.write(cmd)
+# Set up the pins used by the BTU meter. Temperature sensors are 10K Tekmar
+# 071 thermistors, and the flow sensor is a dry switch closure.
+pin_thot = AnalogIn(board.A3)
+pin_tcold = AnalogIn(board.A1)
+pin_flow = DigitalInOut((board.A0))
+pin_flow.direction = Direction.INPUT
+pin_flow.pull = Pull.UP
 
-# The object that reads the power and transmits readings.  Initially None but
-# determined in the main loop
-reader = None
+# Buffers to hold the most recent temperature readings. Ultimately averaged
+# to determine BTUs.
+buf_len = 100
+arr_hot = [0] * buf_len
+arr_cold = [0] * buf_len
+# index tracking where in the buffer we are storing the current temperature
+# reading.
+ix_buf = 0
+
+def current_temps():
+    """Return the current hot, cold, and delta temperatures, adjusted
+    for the calibration coefficient.
+    """
+    calib = calibrate.DELTA_T_CALIB
+    t_hot = t_from_adc(sum(arr_hot) / buf_len, 4990.0)
+    t_hot += calib / 2.0
+    t_cold = t_from_adc(sum(arr_cold) / buf_len, 4990.0)
+    t_cold -= calib / 2.0
+    delta_t = t_hot - t_cold
+    return t_hot, t_cold, delta_t
+
+# variable to accumulate characters read in from the E5 Lora module.
+recv_buf = ''
+
+# initial state of the flow switch
+flow_state = pin_flow.value
+
+# variables to accumulate flow switch pulses and accumulated heat
+flow_count = 0
+heat_count = 0
+
+COUNT_ROLLOVER = 2**24     # only let the above counts reach 2**24
+
+# Tracks when the last LoRa transmit occurred
+_TICKS_MAX = const((1<<29) - 1)
+last_xmit = supervisor.ticks_ms()
 
 while True:
 
     try:
-        # Make sure correct reader is being used
-        if config.detail:
-            if type(reader) is not DetailReader:
-                reader = DetailReader(e5_uart)
-                print('made detail')
-        else:
-            if type(reader) is not AverageReader:
-                reader = AverageReader(e5_uart)
-                print('made average')
 
-        # Read sensor and potentially send data
-        reader.read()
+        arr_hot[ix_buf] = pin_thot.value
+        arr_cold[ix_buf] = pin_tcold.value
+        ix_buf = (ix_buf + 1) % buf_len
 
-        # Read any lines that have been sent by the E5 module.  Check to 
+        if pin_flow.value != flow_state:
+            # a possible change of state occurred
+            # ride out the bounces or noise spikes
+            time.sleep(0.02)
+            new_state = pin_flow.value
+            if new_state != flow_state:
+                # a real changed occurred
+                if new_state == False and flow_state == True:
+
+                    # a switch closure occurred
+                    flow_count += 1
+                    flow_count = flow_count % COUNT_ROLLOVER
+
+                    t_hot, t_cold, delta_t = current_temps()
+                    heat_count += int(delta_t * 10.0)
+                    heat_count = max(0, heat_count)   # don't let total go negative
+                    heat_count = heat_count % COUNT_ROLLOVER
+
+                    print(flow_count, heat_count)
+
+                flow_state = new_state
+
+        # Read a character that may have been sent by the E5 module.  Check to 
         # see if they are downlinks & process if so.
-        while True:
-            lin = e5_uart.readline()
-            if lin is None: break
-            try:
-                lin_str = str(lin, 'ascii').strip()
-                print(lin_str)
-                lora.check_for_downlink(lin_str, e5_uart)
-            except:
-                print('Bad character in line:', lin)
+        ch = e5_uart.read(1)
+        if ch is not None:
+            if ch in (b'\n', b'\r'):
+                if len(recv_buf):
+                    print(recv_buf)
+                    lora.check_for_downlink(recv_buf, e5_uart)
+                    recv_buf = ''
+            else:
+                try:
+                    recv_buf += str(ch, 'ascii')
+                except:
+                    print('Bad character:', ch)
+
+        # Check to see if it is time to transmit
+        cur_ticks = supervisor.ticks_ms()
+        ticks_since_xmit = (cur_ticks - last_xmit) & _TICKS_MAX
+        if ticks_since_xmit >= config.secs_between_xmit * 1000:
+            last_xmit = cur_ticks
+            lora.send_reboot(e5_uart)
 
     except KeyboardInterrupt:
         sys.exit()
     
     except:
         print('Unknown error.')
+        raise
         time.sleep(1)
