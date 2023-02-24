@@ -65,8 +65,7 @@ recv_buf = ''
 flow_state = pin_flow.value
 
 # variables to accumulate flow switch pulses and accumulated heat
-flow_count = 0
-heat_count = 0
+heat_count, flow_count = config.starting_counts
 
 COUNT_ROLLOVER = 2**24     # only let the above counts reach 2**24
 
@@ -131,6 +130,8 @@ while True:
             msg = f'05{heat_count:06X}{flow_count:06X}{t_hot_tenths:04X}{t_cold_tenths:04X}'
             print(msg)
             lora.send_data(msg, e5_uart)
+            # store heat and flow counts in case reboot
+            config.starting_counts = (heat_count, flow_count)
 
     except KeyboardInterrupt:
         sys.exit()
