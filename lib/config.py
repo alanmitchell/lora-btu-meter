@@ -16,11 +16,11 @@ class Configuration:
         # memory to see what value to use.  NVM bytes will be 255 if they have never
         # been written before.
 
-        # read values from non-volatile storage. Had problems using one
-        # struct.unpack statement (treated the H as 4 bytes long).
-        self._secs_between_xmit = struct.unpack('H', nvm[0:2])[0]
-        self._start_heat_count = struct.unpack('I', nvm[2:6])[0]
-        self._start_flow_count = struct.unpack('I', nvm[6:10])[0]
+        # read values from non-volatile storage. Need the "<" in the format 
+        # string so no padding is included in the bytes
+        self._secs_between_xmit, \
+            self._start_heat_count, \
+            self._start_flow_count = struct.unpack('<HII', nvm[0:10])
 
         # set to defaults, if values haven't been initialized
         if self._secs_between_xmit == 2**16 - 1:
@@ -31,12 +31,15 @@ class Configuration:
             self._start_flow_count = 0
 
     def save_to_nvm(self):
-        """Saves the key config variables to non-volatile storage. Had
-        trouble with one pack statement as it treated the H as 4 bytes long.
+        """Saves the key config variables to non-volatile storage. 
         """
-        nvm[0:2] = struct.pack('H', self._secs_between_xmit)
-        nvm[2:6] = struct.pack('I', self._start_heat_count)
-        nvm[6:10] = struct.pack('I', self._start_flow_count)
+        # need the "<" in the format string to avoid padding.
+        nvm[0:10] = struct.pack(
+            '<HII', 
+            self._secs_between_xmit,
+            self._start_heat_count,
+            self._start_flow_count
+            )
 
     @property
     def secs_between_xmit(self):
