@@ -138,5 +138,4 @@ while True:
     
     except:
         print('Unknown error.')
-        raise
         time.sleep(1)
