@@ -14,7 +14,7 @@ import sys
 import lora
 from config import config
 from thermistor import t_from_adc
-import calibrate
+import settings
 
 # Serial port talking to LoRaWAN module, SEEED Grove E5.
 e5_uart = busio.UART(
@@ -50,10 +50,10 @@ def current_temps():
     """Return the current hot, cold, and delta temperatures, adjusted
     for the calibration coefficient.
     """
-    calib = calibrate.DELTA_T_CALIB
-    t_hot = t_from_adc(sum(arr_hot) / buf_len, 4990.0)
+    calib = settings.DELTA_T_CALIB
+    t_hot = t_from_adc(sum(arr_hot) / buf_len, 4990.0, settings.STEINHART)
     t_hot += calib / 2.0
-    t_cold = t_from_adc(sum(arr_cold) / buf_len, 4990.0)
+    t_cold = t_from_adc(sum(arr_cold) / buf_len, 4990.0, settings.STEINHART)
     t_cold -= calib / 2.0
     delta_t = t_hot - t_cold
     return t_hot, t_cold, delta_t
@@ -84,7 +84,7 @@ while True:
         if pin_flow.value != flow_state:
             # a possible change of state occurred
             # ride out the bounces or noise spikes
-            time.sleep(0.02)
+            time.sleep(0.01)
             new_state = pin_flow.value
             if new_state != flow_state:
                 # a real changed occurred
@@ -99,7 +99,7 @@ while True:
                     heat_count = max(0, heat_count)   # don't let total go negative
                     heat_count = heat_count % COUNT_ROLLOVER
 
-                    print(flow_count, heat_count)
+                    print(flow_count, heat_count, t_hot, t_cold)
 
                 flow_state = new_state
 
