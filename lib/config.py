@@ -18,17 +18,22 @@ class Configuration:
 
         # read values from non-volatile storage. Need the "<" in the format 
         # string so no padding is included in the bytes
-        self._secs_between_xmit, \
-            self._start_heat_count, \
-            self._start_flow_count = struct.unpack('<HII', nvm[0:10])
+        if nvm[0:2] == bytearray(b'\xff\xff'):
+            self._secs_between_xmit = Configuration.SECS_BETWEEN_XMIT_DEFAULT
+        else:
+            self._secs_between_xmit, = struct.unpack('<H', nvm[0:2])
 
-        # set to defaults, if values haven't been initialized
-        if self._secs_between_xmit == 2**16 - 1:
-            self._secs_between_xmit = SECS_BETWEEN_XMIT_DEFAULT
-        if self._start_heat_count >= 2**24 - 1:
+        if nvm[2:6] == bytearray(b'\xff\xff\xff\xff'):
             self._start_heat_count = 0
-        if self._start_flow_count >= 2**24 - 1:
+        else:
+            self._start_heat_count, = struct.unpack('<I', nvm[2:6])
+
+        if nvm[6:10] == bytearray(b'\xff\xff\xff\xff'):
             self._start_flow_count = 0
+        else:
+            self._start_flow_count, = struct.unpack('<I', nvm[6:10])
+
+        self.save_to_nvm()
 
     def save_to_nvm(self):
         """Saves the key config variables to non-volatile storage. 
