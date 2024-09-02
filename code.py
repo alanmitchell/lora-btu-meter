@@ -74,6 +74,7 @@ COUNT_ROLLOVER = 2**24     # only let the above counts reach 2**24
 _TICKS_MAX = const((1<<29) - 1)
 last_xmit = supervisor.ticks_ms()
 
+# One trip through the loop is about 0.71 ms
 while True:
 
     try:
