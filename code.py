@@ -1,3 +1,4 @@
+# pyright: reportShadowedImports=false
 """CircuitPython code to implement a BTU meter and send the data via LoRaWAN.
 Cumulative BTUs and gallons of flow are measured and transmitted.  Also, hot and
 cold temperatures of the fluid are transmitted, as measured at the time of 
@@ -29,8 +30,8 @@ time.sleep(8.0)
 lora.send_reboot(e5_uart)
 time.sleep(7.0)    # need to wait for send to continue.
 
-# Set up the pins used by the BTU meter. Temperature sensors are 10K Tekmar
-# 071 thermistors, and the flow sensor is a dry switch closure.
+# Set up the pins used by the BTU meter. Temperature sensors are 
+# thermistors, and the flow sensor is a dry switch closure.
 pin_thot = AnalogIn(board.A3)
 pin_tcold = AnalogIn(board.A1)
 pin_flow = DigitalInOut((board.A0))
