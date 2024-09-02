@@ -1,0 +1,17 @@
+#!/bin/bash
+# Script to deploy the calibrate script. Assumes that the main LORA BTU
+# meter script has been deployed once to ensure that settings and thermistor
+# files are in place on the board.
+
+# continue script even if error occurs
+set +e
+
+# found that it was more reliable to delete the code.py file first before
+# copying a new one.
+if [ -f /media/alan/CIRCUITPY/code.py ]; then
+    rm /media/alan/CIRCUITPY/code.py
+fi
+sleep 1
+
+# copy the code.py file 
+cp code.py /media/alan/CIRCUITPY/code.py
